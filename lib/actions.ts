@@ -1,0 +1,413 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { supabaseAdmin } from "@/lib/supabase";
+import { PRODUCTS_BUCKET, deleteImage } from "@/lib/images";
+
+export type ActionResult =
+  | { ok: true; message?: string; invoiceNo?: string; transactionId?: string }
+  | { ok: false; error: string };
+
+async function authorized(): Promise<boolean> {
+  const session = await getSession();
+  return Boolean(session?.user);
+}
+
+function int(value: FormDataEntryValue | null): number | null {
+  const n = typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(n) ? n : null;
+}
+
+async function uploadProductImage(file: File | null | undefined): Promise<{ path: string } | { error: string } | { none: true }> {
+  if (!file || file.size === 0) return { none: true };
+  if (!file.type.startsWith("image/")) return { error: "File yang diunggah harus berupa gambar." };
+  if (file.size > 2 * 1024 * 1024) return { error: "Ukuran gambar maksimal 2 MB." };
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `products/${Date.now()}-${safeName}`;
+
+  const { error } = await supabaseAdmin.storage.from(PRODUCTS_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type,
+  });
+
+  if (error) return { error: "Gagal mengunggah gambar. Coba lagi." };
+  return { path };
+}
+
+// ---------------------------------------------------------------------------
+// Produk
+// ---------------------------------------------------------------------------
+
+export async function createProduct(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const price = int(formData.get("price"));
+  const costRaw = String(formData.get("costPrice") ?? "").trim();
+  const costPrice = costRaw === "" ? null : int(formData.get("costPrice"));
+  const stock = int(formData.get("stock")) ?? 0;
+
+  if (!name) return { ok: false, error: "Nama produk wajib diisi." };
+  if (price === null || price <= 0) return { ok: false, error: "Harga jual harus angka lebih dari 0." };
+  if (costPrice !== null && costPrice < 0) return { ok: false, error: "Harga modal tidak valid." };
+  if (stock < 0) return { ok: false, error: "Stok tidak boleh negatif." };
+
+  const imageResult = await uploadProductImage(formData.get("image") as File | null);
+  if ("error" in imageResult) return { ok: false, error: imageResult.error };
+
+  await prisma.product.create({
+    data: {
+      name,
+      category: category || null,
+      description: description || null,
+      image: "path" in imageResult ? imageResult.path : null,
+      price,
+      costPrice,
+      stock,
+    },
+  });
+
+  revalidatePath("/products");
+  revalidatePath("/pos");
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Produk berhasil ditambahkan." };
+}
+
+export async function updateProduct(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const price = int(formData.get("price"));
+  const costRaw = String(formData.get("costPrice") ?? "").trim();
+  const costPrice = costRaw === "" ? null : int(formData.get("costPrice"));
+
+  if (!id) return { ok: false, error: "Produk tidak ditemukan." };
+  if (!name) return { ok: false, error: "Nama produk wajib diisi." };
+  if (price === null || price <= 0) return { ok: false, error: "Harga jual harus angka lebih dari 0." };
+
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Produk tidak ditemukan." };
+
+  let image: string | undefined;
+  const imageResult = await uploadProductImage(formData.get("image") as File | null);
+  if ("error" in imageResult) return { ok: false, error: imageResult.error };
+  if ("path" in imageResult) {
+    image = imageResult.path;
+    await deleteImage(existing.image);
+  }
+
+  await prisma.product.update({
+    where: { id },
+    data: {
+      name,
+      category: category || null,
+      description: description || null,
+      price,
+      costPrice,
+      ...(image ? { image } : {}),
+    },
+  });
+
+  revalidatePath("/products");
+  revalidatePath("/pos");
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Produk berhasil diperbarui." };
+}
+
+export async function deleteProduct(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { ok: false, error: "Produk tidak ditemukan." };
+
+  const used = await prisma.transactionItem.count({ where: { productId: id } });
+  if (used > 0) {
+    return { ok: false, error: "Produk tidak bisa dihapus karena sudah pernah terjual." };
+  }
+
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Produk tidak ditemukan." };
+
+  await prisma.product.delete({ where: { id } });
+  await deleteImage(existing.image);
+  revalidatePath("/products");
+  revalidatePath("/pos");
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Produk berhasil dihapus." };
+}
+
+export async function updateStock(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const id = String(formData.get("id") ?? "");
+  const mode = String(formData.get("mode") ?? "set");
+  const amount = int(formData.get("amount"));
+
+  if (!id) return { ok: false, error: "Produk tidak ditemukan." };
+  if (amount === null || amount < 0) return { ok: false, error: "Jumlah stok tidak valid." };
+
+  const existing = await prisma.product.findUnique({ where: { id } });
+  if (!existing) return { ok: false, error: "Produk tidak ditemukan." };
+
+  const next =
+    mode === "add" ? existing.stock + amount : amount;
+
+  await prisma.product.update({ where: { id }, data: { stock: next } });
+
+  revalidatePath("/products");
+  revalidatePath("/pos");
+  revalidatePath("/dashboard");
+  return { ok: true, message: `Stok ${existing.name} diperbarui menjadi ${next}.` };
+}
+
+// ---------------------------------------------------------------------------
+// POS / Transaksi
+// ---------------------------------------------------------------------------
+
+function roundUp(n: number): number {
+  return Math.round(n);
+}
+
+function generateInvoiceNo(): string {
+  const d = new Date();
+  const ymd = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("");
+  const hms = [
+    String(d.getHours()).padStart(2, "0"),
+    String(d.getMinutes()).padStart(2, "0"),
+    String(d.getSeconds()).padStart(2, "0"),
+  ].join("");
+  const rand = String(Math.floor(Math.random() * 900) + 100);
+  return `INV-${ymd}-${hms}-${rand}`;
+}
+
+type CartItem = { productId: string; quantity: number };
+
+export async function checkout(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const customerName = String(formData.get("customerName") ?? "").trim();
+  const paymentMethod = String(formData.get("paymentMethod") ?? "CASH");
+  const defer = String(formData.get("defer") ?? "") === "true";
+
+  let cart: CartItem[];
+  try {
+    cart = JSON.parse(String(formData.get("items") ?? "[]")) as CartItem[];
+  } catch {
+    return { ok: false, error: "Keranjang tidak valid." };
+  }
+
+  const cleaned = cart.filter((i) => i.productId && Number.isInteger(i.quantity) && i.quantity > 0);
+  if (cleaned.length === 0) return { ok: false, error: "Keranjang masih kosong." };
+
+  const ids = [...new Set(cleaned.map((i) => i.productId))];
+  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  for (const item of cleaned) {
+    if (!byId.has(item.productId)) return { ok: false, error: "Ada produk yang tidak lagi tersedia." };
+  }
+
+  const subtotal = cleaned.reduce((sum, item) => {
+    const product = byId.get(item.productId)!;
+    return sum + product.price * item.quantity;
+  }, 0);
+
+  const discount = 0;
+  const tax = roundUp(subtotal * 0.11);
+  const total = subtotal + tax - discount;
+
+  if (defer) {
+    const invoiceNo = generateInvoiceNo();
+    try {
+      await prisma.transaction.create({
+        data: {
+          invoiceNo,
+          customerName: customerName || null,
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentMethod,
+          paymentStatus: "PENDING",
+          items: {
+            create: cleaned.map((item) => {
+              const product = byId.get(item.productId)!;
+              return {
+                productId: product.id,
+                productName: product.name,
+                unitPrice: product.price,
+                quantity: item.quantity,
+                subtotal: product.price * item.quantity,
+              };
+            }),
+          },
+        },
+      });
+    } catch {
+      return { ok: false, error: "Gagal menyimpan transaksi, coba lagi." };
+    }
+    revalidatePath("/transactions");
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Transaksi ditunda (menunggu pembayaran).", invoiceNo };
+  }
+
+  // Langsung lunas → cek stok & kurangi stok
+  try {
+    const invoiceNo = generateInvoiceNo();
+    await prisma.$transaction(async (tx) => {
+      for (const item of cleaned) {
+        const result = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
+        });
+        if (result.count !== 1) {
+          const product = byId.get(item.productId)!;
+          throw new Error(`Stok ${product.name} tidak mencukupi.`);
+        }
+      }
+
+      await tx.transaction.create({
+        data: {
+          invoiceNo,
+          customerName: customerName || null,
+          subtotal,
+          discount,
+          tax,
+          total,
+          paymentMethod,
+          paymentStatus: "PAID",
+          paidAt: new Date(),
+          items: {
+            create: cleaned.map((item) => {
+              const product = byId.get(item.productId)!;
+              return {
+                productId: product.id,
+                productName: product.name,
+                unitPrice: product.price,
+                quantity: item.quantity,
+                subtotal: product.price * item.quantity,
+              };
+            }),
+          },
+        },
+      });
+    });
+
+    revalidatePath("/pos");
+    revalidatePath("/products");
+    revalidatePath("/transactions");
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Pembayaran berhasil.", invoiceNo: invoiceNo! };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Gagal memproses transaksi.";
+    return { ok: false, error: message };
+  }
+}
+
+const ALLOWED_STATUS = ["PAID", "PENDING", "REFUNDED", "FAILED", "EXPIRED"] as const;
+
+export async function updatePaymentStatus(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
+
+  const id = String(formData.get("id") ?? "");
+  const target = String(formData.get("status") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!ALLOWED_STATUS.includes(target as never)) {
+    return { ok: false, error: "Status pembayaran tidak valid." };
+  }
+  if (target === "PENDING") return { ok: false, error: "Tidak bisa mengembalikan ke status menunggu." };
+
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+  if (!transaction) return { ok: false, error: "Transaksi tidak ditemukan." };
+
+  const current = transaction.paymentStatus;
+
+  // PENDING/REFUNDED → PAID : kurangi stok (dengan cek ketersediaan)
+  if ((current === "PENDING" || current === "REFUNDED") && target === "PAID") {
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const item of transaction.items) {
+          const result = await tx.product.updateMany({
+            where: { id: item.productId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (result.count !== 1) {
+            throw new Error(`Stok ${item.productName} tidak mencukupi.`);
+          }
+        }
+        await tx.transaction.update({
+          where: { id },
+          data: { paymentStatus: "PAID", paidAt: new Date(), note: note || null },
+        });
+      });
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Gagal melunasi transaksi." };
+    }
+  }
+
+  // PAID → REFUNDED : kembalikan stok
+  else if (current === "PAID" && target === "REFUNDED") {
+    await prisma.$transaction(async (tx) => {
+      for (const item of transaction.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      await tx.transaction.update({
+        where: { id },
+        data: { paymentStatus: "REFUNDED", note: note || null },
+      });
+    });
+  }
+
+  // PENDING → FAILED / EXPIRED : tanpa perubahan stok
+  else if (current === "PENDING" && (target === "FAILED" || target === "EXPIRED")) {
+    await prisma.transaction.update({
+      where: { id },
+      data: { paymentStatus: target, note: note || null },
+    });
+  } else {
+    return { ok: false, error: `Transisi status ${current} → ${target} tidak diizinkan.` };
+  }
+
+  revalidatePath("/transactions");
+  revalidatePath("/pos");
+  revalidatePath("/products");
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Status pembayaran diperbarui." };
+}
