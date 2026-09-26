@@ -41,13 +41,6 @@ export const PAYMENT_STATUS_COLOR: Record<string, string> = {
   REFUNDED: "blue",
 };
 
-export const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  CASH: "Tunai",
-  QRIS: "QRIS",
-  CARD: "Kartu Debit/Kredit",
-  TRANSFER: "Transfer Bank",
-};
-
 export const TAX_RATE = 0.11; // PPN 11%
 
 export function rounding(value: number): number {

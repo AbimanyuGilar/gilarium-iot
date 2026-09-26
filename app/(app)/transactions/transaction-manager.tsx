@@ -21,7 +21,6 @@ import { updatePaymentStatus, type ActionResult } from "@/lib/actions";
 import {
   PAYMENT_STATUS_COLOR,
   PAYMENT_STATUS_LABEL,
-  PAYMENT_METHOD_LABEL,
   formatDate,
   formatIDR,
   formatNumber,
@@ -214,7 +213,7 @@ export default function TransactionManager({
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Pelanggan</p>
                     <p className="mt-0.5 font-bold">{t.customerName || "Walk-in"} ({t.customerName ? "Terdaftar" : "Umum"})</p>
                     <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Metode Pembayaran</p>
-                    <p className="mt-0.5 font-bold">{PAYMENT_METHOD_LABEL[t.paymentMethod ?? "—"] ?? "—"}</p>
+                    <p className="mt-0.5 font-bold">{t.paymentMethod?.toUpperCase()}</p>
                     {t.note ? (
                       <>
                         <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catatan</p>
