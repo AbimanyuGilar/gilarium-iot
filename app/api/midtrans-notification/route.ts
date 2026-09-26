@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import midtransClient from 'midtrans-client'
 import { prisma } from "@/lib/prisma";
+import { PaymentStatus } from "@/lib/generated/prisma/enums";  
 
 export async function POST(request: Request) {
   const apiClient = new midtransClient.Snap({
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     fraudStatus: fraudStatus 
   } = statusResponse
   
-  async function updateStatus(status: string) {
+  async function updateStatus(status: PaymentStatus) {
     await prisma.transaction.update({
       where: {
         id: orderId
