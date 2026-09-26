@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (transactionStatus === 'capture' && fraudStatus === 'accept') {
       // await updateOrderStatus(orderId, 'PAID');
     } else if (transactionStatus === 'settlement') {
-      // await updateOrderStatus(orderId, 'PAID');
+      // await updateOrderStatus(orderId, 'PAID');https://merchants-app.sbx.midtrans.com/v4/qris/gopay/A120260926065321XiCPCpWVMPID/qr-code
     } else if (
       transactionStatus === 'cancel' ||
       transactionStatus === 'deny' ||
