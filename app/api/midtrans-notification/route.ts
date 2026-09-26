@@ -9,8 +9,10 @@ export async function POST(request: Request) {
     serverKey: process.env.MIDTRANS_SERVER_KEY ?? '',
     clientKey: process.env.MIDTRANS_CLIENT_KEY ?? '',
   })
+
+  const requestJson = await request.json()
   
-  const statusResponse = await (apiClient as any).transaction.notification()
+  const statusResponse = await (apiClient as any).transaction.notification(requestJson)
 
   
   const { 
