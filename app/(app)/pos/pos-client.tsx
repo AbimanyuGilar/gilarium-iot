@@ -129,7 +129,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
       window.snap.pay(transaction.token, {
         onSuccess: function (result) {
           console.log('Success:', result);
-          window.location.href = '/pos/payment/success';
+          window.location.href = '/payment/success';
         },
       })
     } else {
