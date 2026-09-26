@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { PRODUCTS_BUCKET, deleteImage } from "@/lib/images";
+import midtransClient from 'midtrans-client'
 
 export type ActionResult =
   | { ok: true; message?: string; invoiceNo?: string; transactionId?: string }
@@ -40,7 +41,6 @@ async function uploadProductImage(file: File | null | undefined): Promise<{ path
 // ---------------------------------------------------------------------------
 // Produk
 // ---------------------------------------------------------------------------
-
 export async function createProduct(
   _prev: ActionResult,
   formData: FormData
@@ -184,150 +184,63 @@ export async function updateStock(
 // POS / Transaksi
 // ---------------------------------------------------------------------------
 
-function roundUp(n: number): number {
-  return Math.round(n);
+interface ProductToCheckout {
+  id: string
+  qty: number
 }
 
-function generateInvoiceNo(): string {
-  const d = new Date();
-  const ymd = [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    String(d.getDate()).padStart(2, "0"),
-  ].join("");
-  const hms = [
-    String(d.getHours()).padStart(2, "0"),
-    String(d.getMinutes()).padStart(2, "0"),
-    String(d.getSeconds()).padStart(2, "0"),
-  ].join("");
-  const rand = String(Math.floor(Math.random() * 900) + 100);
-  return `INV-${ymd}-${hms}-${rand}`;
+function generateOrderId() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+
+  const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}`;
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+  return `ORDER-${timestamp}-${random}`;
 }
 
-type CartItem = { productId: string; quantity: number };
-
-export async function checkout(
-  _prev: ActionResult,
-  formData: FormData
-): Promise<ActionResult> {
+export async function checkout(products: ProductToCheckout[]) {
+  console.log(products)
   if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
 
-  const customerName = String(formData.get("customerName") ?? "").trim();
-  const paymentMethod = String(formData.get("paymentMethod") ?? "CASH");
-  const defer = String(formData.get("defer") ?? "") === "true";
-
-  let cart: CartItem[];
   try {
-    cart = JSON.parse(String(formData.get("items") ?? "[]")) as CartItem[];
-  } catch {
-    return { ok: false, error: "Keranjang tidak valid." };
-  }
-
-  const cleaned = cart.filter((i) => i.productId && Number.isInteger(i.quantity) && i.quantity > 0);
-  if (cleaned.length === 0) return { ok: false, error: "Keranjang masih kosong." };
-
-  const ids = [...new Set(cleaned.map((i) => i.productId))];
-  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
-  const byId = new Map(products.map((p) => [p.id, p]));
-
-  for (const item of cleaned) {
-    if (!byId.has(item.productId)) return { ok: false, error: "Ada produk yang tidak lagi tersedia." };
-  }
-
-  const subtotal = cleaned.reduce((sum, item) => {
-    const product = byId.get(item.productId)!;
-    return sum + product.price * item.quantity;
-  }, 0);
-
-  const discount = 0;
-  const tax = roundUp(subtotal * 0.11);
-  const total = subtotal + tax - discount;
-
-  if (defer) {
-    const invoiceNo = generateInvoiceNo();
-    try {
-      await prisma.transaction.create({
-        data: {
-          invoiceNo,
-          customerName: customerName || null,
-          subtotal,
-          discount,
-          tax,
-          total,
-          paymentMethod,
-          paymentStatus: "PENDING",
-          items: {
-            create: cleaned.map((item) => {
-              const product = byId.get(item.productId)!;
-              return {
-                productId: product.id,
-                productName: product.name,
-                unitPrice: product.price,
-                quantity: item.quantity,
-                subtotal: product.price * item.quantity,
-              };
-            }),
-          },
-        },
-      });
-    } catch {
-      return { ok: false, error: "Gagal menyimpan transaksi, coba lagi." };
+    const orderId = generateOrderId()
+    
+    const snap = new midtransClient.Snap({
+      isProduction: false,
+      serverKey: process.env.MIDTRANS_SERVER_KEY ?? '',
+      clientKey: process.env.MIDTRANS_CLIENT_KEY ?? ''
+    })
+  
+    const parameter = {
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: 10000
+      },
+      credit_card: {
+        secure: true
+      },
     }
-    revalidatePath("/transactions");
-    revalidatePath("/dashboard");
-    return { ok: true, message: "Transaksi ditunda (menunggu pembayaran).", invoiceNo };
-  }
-
-  // Langsung lunas → cek stok & kurangi stok
-  try {
-    const invoiceNo = generateInvoiceNo();
-    await prisma.$transaction(async (tx) => {
-      for (const item of cleaned) {
-        const result = await tx.product.updateMany({
-          where: { id: item.productId, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
-        });
-        if (result.count !== 1) {
-          const product = byId.get(item.productId)!;
-          throw new Error(`Stok ${product.name} tidak mencukupi.`);
-        }
-      }
-
-      await tx.transaction.create({
-        data: {
-          invoiceNo,
-          customerName: customerName || null,
-          subtotal,
-          discount,
-          tax,
-          total,
-          paymentMethod,
-          paymentStatus: "PAID",
-          paidAt: new Date(),
-          items: {
-            create: cleaned.map((item) => {
-              const product = byId.get(item.productId)!;
-              return {
-                productId: product.id,
-                productName: product.name,
-                unitPrice: product.price,
-                quantity: item.quantity,
-                subtotal: product.price * item.quantity,
-              };
-            }),
-          },
-        },
-      });
-    });
-
-    revalidatePath("/pos");
-    revalidatePath("/products");
-    revalidatePath("/transactions");
-    revalidatePath("/dashboard");
-    return { ok: true, message: "Pembayaran berhasil.", invoiceNo: invoiceNo! };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Gagal memproses transaksi.";
-    return { ok: false, error: message };
+  
+    const transaction = await snap.createTransaction(parameter)
+    
+    const token = transaction.token
+  
+    return {
+      ok: true,
+      token,
+    }
+  } catch {
+    return {
+      ok: false,
+      message: 'Gagal memproses transaksi.'
+    }
   }
 }
 
