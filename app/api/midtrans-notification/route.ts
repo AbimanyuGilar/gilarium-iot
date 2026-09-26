@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         id: orderId
       },
       data: {
-        status: status
+        paymentStatus: status
       }
     })
   } 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (fraudStatus == 'accept'){
       // TODO set transaction status on your database to 'success'
       try {
-        await updateStatus('PAID' as PaymentStatus)
+        await updateStatus('PAID')
         // and response with 200 OK
         return NextResponse.json({status: 'OK'})
       } catch {
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   } else if (transactionStatus == 'settlement'){
       // TODO set transaction status on your database to 'success'
       try {
-        await updateStatus('PAID' as PaymentStatus)
+        await updateStatus('PAID')
         // and response with 200 OK
         return NextResponse.json({status: 'OK'})
       } catch {
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     transactionStatus == 'expire'){
     // TODO set transaction status on your database to 'failure'
     try {
-      await updateStatus('FAILED' as PaymentStatus)
+      await updateStatus('FAILED')
       // and response with 200 OK
       return NextResponse.json({status: 'OK'})
     } catch {
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   } else if (transactionStatus == 'pending'){
     // TODO set transaction status on your database to 'pending' / waiting payment
     try {
-      await updateStatus('PENDING' as PaymentStatus)
+      await updateStatus('PENDING')
       // and response with 200 OK
       return NextResponse.json({status: 'OK'})
     } catch {
