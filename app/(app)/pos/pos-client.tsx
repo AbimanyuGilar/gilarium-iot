@@ -79,8 +79,6 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
 
   const itemCount = useMemo(() => cartLines.reduce((s, l) => s + l.qty, 0), [cartLines]);
   const subtotal = useMemo(() => cartLines.reduce((s, l) => s + l.product.price * l.qty, 0), [cartLines]);
-  const tax = Math.round(subtotal * 0.11);
-  const total = subtotal + tax;
 
   function add(id: string, qty = 1) {
     setCart((prev) => {
@@ -129,7 +127,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
       window.snap.pay(transaction.token, {
         onSuccess: function (result) {
           console.log('Success:', result);
-          window.location.href = '/payment/success';
+          window.location.href = `/pos`;
         },
       })
     } else {
@@ -153,7 +151,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
           action={
             <Badge color="green" className="h-11 px-4 text-sm">
               <ShoppingCart className="mr-1.5 h-4 w-4" strokeWidth={2.5} />
-              {formatNumber(itemCount)} item · {formatIDR(total)}
+              {formatNumber(itemCount)} item · {formatIDR(subtotal)}
             </Badge>
           }
         />
@@ -316,14 +314,6 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
                   <span>Subtotal</span>
                   <span className="font-semibold text-white">{formatIDR(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-white/70">
-                  <span>Pajak PPN 11%</span>
-                  <span className="font-semibold text-white">{formatIDR(tax)}</span>
-                </div>
-                <div className="flex justify-between pt-1 text-base font-extrabold text-white">
-                  <span>Total</span>
-                  <span>{formatIDR(total)}</span>
-                </div>
               </div>
 
               <Button
@@ -333,7 +323,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
                 onClick={pay}
               >
                 <Wallet className="h-6 w-6" strokeWidth={2.5} />
-                {cartLines.length === 0 ? "Keranjang Kosong" : `Bayar ${formatIDR(total)}`}
+                {cartLines.length === 0 ? "Keranjang Kosong" : `Bayar ${formatIDR(subtotal)}`}
               </Button>
               <p className="mt-3 text-center text-xs text-white/50">
                 Disimpan otomatis &amp; stok berkurang saat lunas.
@@ -357,7 +347,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
           </span>
           <span className="min-w-0 flex-1 text-left">
             <span className="block truncate text-sm font-extrabold tracking-tight">
-              {formatIDR(total)}
+              {formatIDR(subtotal)}
             </span>
             <span className="block text-xs text-white/60">
               {cartLines.length === 0 ? "Keranjang kosong" : `${formatNumber(itemCount)} item`}
@@ -453,23 +443,16 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
                 <span>Subtotal</span>
                 <span className="font-semibold text-white">{formatIDR(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-white/70">
-                <span>Pajak PPN 11%</span>
-                <span className="font-semibold text-white">{formatIDR(tax)}</span>
-              </div>
-              <div className="flex justify-between pt-1 text-base font-extrabold text-white">
-                <span>Total</span>
-                <span>{formatIDR(total)}</span>
-              </div>
             </div>
 
             <Button
               size="lg"
               className="mt-4 w-full"
               disabled={cartLines.length === 0}
+              onClick={pay}
             >
               <Wallet className="h-5 w-5" strokeWidth={2.5} />
-              {cartLines.length === 0 ? "Keranjang Kosong" : `Bayar ${formatIDR(total)}`}
+              {cartLines.length === 0 ? "Keranjang Kosong" : `Bayar ${formatIDR(subtotal)}`}
             </Button>
           </div>
         </Modal>

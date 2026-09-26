@@ -206,14 +206,78 @@ function generateOrderId() {
 }
 
 export async function checkout(products: ProductToCheckout[]) {
-  console.log(products)
   if (!(await authorized())) return { ok: false, error: "Sesi berakhir, silakan login." };
 
+  const orderId = generateOrderId()
+
+  const productIds = products.map(item => item.id)
+
+  const productToCheckout = await prisma.product.findMany({
+    where: {
+      id: {
+        in: productIds
+      },
+      stock: {
+        gte: 0
+      }
+    }
+  })
+
+  if (productToCheckout.length <= 0) {
+    return {
+      ok: false,
+      message: 'Produk tidak ada.'
+    }
+  }
+
+  const productDetails = productToCheckout.map(item => {
+    const quantity = products.find(product => product.id == item.id)?.qty as number
+    return {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity,
+      total: item.price * quantity
+    }
+  })
+  
+  const grandTotal = productDetails.reduce((acc, item) => acc + item.total, 0)
+
   try {
-    const orderId = generateOrderId()
-    
+    await prisma.$transaction(async tx => {
+      const transaction = await tx.transaction.create({
+        data: {
+          invoiceNo: orderId,
+          subtotal: grandTotal,
+          total: grandTotal,
+        }
+      })
+
+      const transactionItems = await tx.transactionItem.createMany({
+        data: productDetails.map(item => ({
+          transactionId: transaction.id,
+          productId: item.id,
+          productName: item.name,
+          unitPrice: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity
+        }))
+      })
+
+      return {
+        transaction, transactionItems
+      }
+    })
+  } catch {
+    return {
+      ok: false,
+      message: 'Gagal memproses transaksi.'
+    }
+  }
+
+  try {
     const snap = new midtransClient.Snap({
-      isProduction: false,
+      isProduction: process.env.MIDTRANS_ENV === 'production',
       serverKey: process.env.MIDTRANS_SERVER_KEY ?? '',
       clientKey: process.env.MIDTRANS_CLIENT_KEY ?? ''
     })
@@ -221,8 +285,13 @@ export async function checkout(products: ProductToCheckout[]) {
     const parameter = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: 10000
+        gross_amount: grandTotal,
       },
+
+      item_details: productDetails,
+
+      enabled_payments: ['gopay', 'qris'],
+
       credit_card: {
         secure: true
       },
@@ -235,6 +304,7 @@ export async function checkout(products: ProductToCheckout[]) {
     return {
       ok: true,
       token,
+      orderId
     }
   } catch {
     return {

@@ -1,45 +1,73 @@
-import { NextResponse } from 'next/server';
-import midtransClient from 'midtrans-client';
-
-const snap = new midtransClient.Snap({
-  isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
-  serverKey: process.env.MIDTRANS_SERVER_KEY || '',
-  clientKey: process.env.MIDTRANS_CLIENT_KEY || '',
-});
+import { NextResponse } from "next/server";
+import midtransClient from 'midtrans-client'
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
-  try {
-    const notificationJson = await request.json();
-
-    // Verifikasi otomatis via SDK (Signature Key langsung dicek di sini)
-    const statusResponse = await (snap as any).transaction.notification(notificationJson);
-
-    const orderId = statusResponse.order_id;
-    const transactionStatus = statusResponse.transaction_status;
-    const fraudStatus = statusResponse.fraud_status;
-
-    if (transactionStatus === 'capture' && fraudStatus === 'accept') {
-      // await updateOrderStatus(orderId, 'PAID');
-    } else if (transactionStatus === 'settlement') {
-      // await updateOrderStatus(orderId, 'PAID');https://merchants-app.sbx.midtrans.com/v4/qris/gopay/A120260926065321XiCPCpWVMPID/qr-code
-    } else if (
-      transactionStatus === 'cancel' ||
-      transactionStatus === 'deny' ||
-      transactionStatus === 'expire'
-    ) {
-      // await updateOrderStatus(orderId, 'FAILED');
-    } else if (transactionStatus === 'pending') {
-      // await updateOrderStatus(orderId, 'PENDING');
-    }
-
-    console.log({
-      transactionStatus,
-      fraudStatus
+  const apiClient = new midtransClient.Snap({
+    isProduction: process.env.MIDTRANS_ENV === 'production',
+    serverKey: process.env.MIDTRANS_SERVER_KEY ?? '',
+    clientKey: process.env.MIDTRANS_CLIENT_KEY ?? '',
+  })
+  
+  const statusResponse = await (apiClient as any).transaction.notification()
+  
+  const { 
+    order_id: orderId, 
+    transaction_status: transactionStatus, 
+    fraudStatus: fraudStatus 
+  } = statusResponse
+  
+  async function updateStatus(status: string) {
+    await prisma.transaction.update({
+      where: {
+        id: orderId
+      },
+      data: {
+        status: status
+      }
     })
-
-    return NextResponse.json({ status: 'OK' });
-  } catch (error) {
-    console.error('Notification error / Invalid signature:', error);
-    return NextResponse.json({ message: 'Unauthorized / Invalid' }, { status: 401 });
+  } 
+  
+  if (transactionStatus == 'capture'){
+    if (fraudStatus == 'accept'){
+      // TODO set transaction status on your database to 'success'
+      try {
+        await updateStatus('PAID')
+        // and response with 200 OK
+        return NextResponse.json({status: 'OK'})
+      } catch {
+        return NextResponse.json({status: 500})
+      }
+    }
+  } else if (transactionStatus == 'settlement'){
+      // TODO set transaction status on your database to 'success'
+      try {
+        await updateStatus('PAID')
+        // and response with 200 OK
+        return NextResponse.json({status: 'OK'})
+      } catch {
+        return NextResponse.json({status: 500})
+      }
+  } else if (transactionStatus == 'cancel' ||
+    transactionStatus == 'deny' ||
+    transactionStatus == 'expire'){
+    // TODO set transaction status on your database to 'failure'
+    try {
+      await updateStatus('FAILED')
+      // and response with 200 OK
+      return NextResponse.json({status: 'OK'})
+    } catch {
+      return NextResponse.json({status: 500})
+    }
+    // and response with 200 OK
+  } else if (transactionStatus == 'pending'){
+    // TODO set transaction status on your database to 'pending' / waiting payment
+    try {
+      await updateStatus('PENDING')
+      // and response with 200 OK
+      return NextResponse.json({status: 'OK'})
+    } catch {
+      return NextResponse.json({status: 500})
+    }
   }
 }
