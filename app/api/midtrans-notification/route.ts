@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   })
   
   const statusResponse = await (apiClient as any).transaction.notification()
+
   
   const { 
     order_id: orderId, 
@@ -19,13 +20,23 @@ export async function POST(request: Request) {
   } = statusResponse
   
   async function updateStatus(status: PaymentStatus) {
-    await prisma.transaction.update({
-      where: {
-        id: orderId
-      },
-      data: {
-        paymentStatus: status
-      }
+    await prisma.$transaction(async tx => {
+      const order = await tx.transaction.findUnique({
+        where: {
+          invoiceNo: orderId
+        },
+        select: {
+          id: true
+        }
+      })
+      await tx.transaction.update({
+        where: {
+          id: order?.id
+        },
+        data: {
+          paymentStatus: status
+        }
+      })
     })
   } 
   
