@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Receipt,
   CheckCircle2,
-  RotateCcw,
   XCircle,
   Clock4,
   Loader2,
@@ -33,7 +32,6 @@ export type TransactionWithItems = Transaction & { items: ItemDTO[] };
 
 type StatusAction =
   | { type: "PAID"; title: string; text: string }
-  | { type: "REFUNDED"; title: string; text: string }
   | { type: "FAILED"; title: string; text: string }
   | { type: "EXPIRED"; title: string; text: string };
 
@@ -90,14 +88,6 @@ export default function TransactionManager({
           { type: "FAILED", title: "Tandai Gagal", text: "Pembayaran gagal / batal. Transaksi dibatalkan, stok tidak berubah." },
           { type: "EXPIRED", title: "Tandai Kedaluwarsa", text: "Batas pembayaran lewat. Transaksi dianggap kedaluwarsa." },
         ];
-      case "PAID":
-        return [
-          { type: "REFUNDED", title: "Refund Transaksi", text: "Kembalikan dana pelanggan. Stok produk akan dikembalikan." },
-        ];
-      case "REFUNDED":
-        return [
-          { type: "PAID", title: "Lunasi Ulang", text: "Pelanggan membayar ulang. Stok produk akan dikurangi kembali." },
-        ];
       default:
         return [];
     }
@@ -126,7 +116,6 @@ export default function TransactionManager({
             ["all", "Semua", "bg-foreground text-white"],
             ["PENDING", PAYMENT_STATUS_LABEL.PENDING, "bg-accent text-white"],
             ["PAID", PAYMENT_STATUS_LABEL.PAID, "bg-secondary text-white"],
-            ["REFUNDED", PAYMENT_STATUS_LABEL.REFUNDED, "bg-primary text-white"],
             ["FAILED", PAYMENT_STATUS_LABEL.FAILED, "bg-red-500 text-white"],
             ["EXPIRED", PAYMENT_STATUS_LABEL.EXPIRED, "bg-gray-300 text-gray-900"],
           ] as const
@@ -228,19 +217,11 @@ export default function TransactionManager({
                         <Button
                           key={a.type}
                           size="sm"
-                          variant={
-                            a.type === "PAID"
-                              ? "success"
-                              : a.type === "REFUNDED"
-                                ? "outline"
-                                : "secondary"
-                          }
+                          variant={a.type === "PAID" ? "success" : "secondary"}
                           onClick={() => setTarget({ transaction: t, action: a })}
                         >
                           {a.type === "PAID" ? (
                             <CheckCircle2 className="h-4 w-4" strokeWidth={2.5} />
-                          ) : a.type === "REFUNDED" ? (
-                            <RotateCcw className="h-4 w-4" strokeWidth={2.5} />
                           ) : (
                             <Clock4 className="h-4 w-4" strokeWidth={2.5} />
                           )}
@@ -303,13 +284,11 @@ function StatusActionModal({
       <div className="mb-6 flex items-start gap-4">
         <span
           className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${
-            isPaidDest ? "bg-green-100 text-green-600" : action.type === "REFUNDED" ? "bg-blue-100 text-blue-600" : "bg-red-100 text-red-500"
+            isPaidDest ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500"
           }`}
         >
           {isPaidDest ? (
             <CheckCircle2 className="h-7 w-7" strokeWidth={2.5} />
-          ) : action.type === "REFUNDED" ? (
-            <RotateCcw className="h-7 w-7" strokeWidth={2.5} />
           ) : (
             <XCircle className="h-7 w-7" strokeWidth={2.5} />
           )}
@@ -326,7 +305,7 @@ function StatusActionModal({
         <input type="hidden" name="status" value={action.type} />
 
         <Field label="Catatan (opsional)">
-          <Textarea name="note" placeholder="Contoh: sudah menerima tunai / alasan refund..." />
+          <Textarea name="note" placeholder="Contoh: sudah menerima tunai / kendala pembayaran..." />
         </Field>
 
         {error ? (
@@ -340,7 +319,7 @@ function StatusActionModal({
           <Button
             type="submit"
             size="lg"
-            variant={isPaidDest ? "success" : action.type === "REFUNDED" ? "primary" : "danger"}
+            variant={isPaidDest ? "success" : "danger"}
             disabled={pending}
           >
             {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" strokeWidth={2.5} />}

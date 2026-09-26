@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, ShoppingCart, Package, Receipt, Cpu } from "lucide-react";
+import Image from "next/image";
+import { LayoutDashboard, ShoppingCart, Package, ArrowRightLeft } from "lucide-react";
 import NavLink from "@/components/nav-link";
 import LogoutButton from "@/components/logout-button";
 
@@ -11,8 +12,8 @@ export default function Sidebar({ user }: { user: { name?: string; email: string
       <div className="relative flex h-36 shrink-0 items-center gap-4 overflow-hidden bg-primary px-4 lg:px-6">
         <span className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" />
         <span className="absolute -bottom-14 -right-4 h-24 w-24 rotate-45 bg-white/5" />
-        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white text-primary">
-          <Cpu className="h-9 w-9" strokeWidth={2.5} />
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white p-3 text-primary">
+          <Image src="/logo.svg" alt="Gilarium IoT Logo" width={40} height={40} className="h-full w-full object-contain" />
         </span>
         <div className="hidden lg:block">
           <p className="text-2xl font-extrabold tracking-tight leading-none">Gilarium IoT</p>
@@ -24,9 +25,9 @@ export default function Sidebar({ user }: { user: { name?: string; email: string
           Menu
         </p>
         <NavLink href="/dashboard" label="Dashboard" icon={LayoutDashboard} />
-        <NavLink href="/pos" label="Kasir POS" icon={ShoppingCart} />
+        <NavLink href="/pos" label="Kasir" icon={ShoppingCart} />
         <NavLink href="/products" label="Produk" icon={Package} />
-        <NavLink href="/transactions" label="Transaksi" icon={Receipt} />
+        <NavLink href="/transactions" label="Transaksi" icon={ArrowRightLeft} />
       </nav>
 
       <div className="shrink-0 border-t-2 border-white/10 p-3 lg:p-4">
@@ -43,14 +44,6 @@ export default function Sidebar({ user }: { user: { name?: string; email: string
           <LogoutButton compact />
         </div>
       </div>
-
-      <Link
-        href="/products"
-        className="hidden h-14 items-center justify-center gap-2 bg-accent text-sm font-bold uppercase tracking-wider text-white transition-all duration-200 hover:scale-[1.02] hover:bg-accent-strong lg:flex"
-      >
-        <Package className="h-5 w-5" strokeWidth={2.5} />
-        Kelola Stok
-      </Link>
     </aside>
   );
 }

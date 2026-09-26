@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   },
   description:
     "Aplikasi Point of Sale untuk toko elektronik & komponen IoT Gilarium IoT.",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

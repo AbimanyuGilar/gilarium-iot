@@ -314,7 +314,7 @@ export async function checkout(products: ProductToCheckout[]) {
   }
 }
 
-const ALLOWED_STATUS = ["PAID", "PENDING", "REFUNDED", "FAILED", "EXPIRED"] as const;
+const ALLOWED_STATUS = ["PAID", "PENDING", "FAILED", "EXPIRED"] as const;
 
 export async function updatePaymentStatus(
   _prev: ActionResult,
@@ -339,8 +339,8 @@ export async function updatePaymentStatus(
 
   const current = transaction.paymentStatus;
 
-  // PENDING/REFUNDED → PAID : kurangi stok (dengan cek ketersediaan)
-  if ((current === "PENDING" || current === "REFUNDED") && target === "PAID") {
+  // PENDING → PAID : kurangi stok (dengan cek ketersediaan)
+  if (current === "PENDING" && target === "PAID") {
     try {
       await prisma.$transaction(async (tx) => {
         for (const item of transaction.items) {
@@ -360,22 +360,6 @@ export async function updatePaymentStatus(
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Gagal melunasi transaksi." };
     }
-  }
-
-  // PAID → REFUNDED : kembalikan stok
-  else if (current === "PAID" && target === "REFUNDED") {
-    await prisma.$transaction(async (tx) => {
-      for (const item of transaction.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
-      await tx.transaction.update({
-        where: { id },
-        data: { paymentStatus: "REFUNDED", note: note || null },
-      });
-    });
   }
 
   // PENDING → FAILED / EXPIRED : tanpa perubahan stok
