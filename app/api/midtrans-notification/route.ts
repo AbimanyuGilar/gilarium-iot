@@ -38,7 +38,8 @@ export async function POST(request: Request) {
         },
         data: {
           paymentStatus: status,
-          paymentMethod
+          paymentMethod,
+          ...(status === 'PAID' ? { paidAt: new Date() } : {})
         }
       })
     })

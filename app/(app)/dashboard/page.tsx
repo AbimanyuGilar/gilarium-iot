@@ -44,7 +44,14 @@ export default async function DashboardPage() {
     prisma.transaction.aggregate({
       _sum: { total: true },
       _count: { _all: true },
-      where: { paymentStatus: "PAID", paidAt: { gte: startOfToday } },
+      where: {
+        paymentStatus: "PAID",
+        OR: [
+          { paidAt: { gte: startOfToday } },
+          { paidAt: null, createdAt: { gte: startOfToday } },
+          { paidAt: null, updatedAt: { gte: startOfToday } },
+        ],
+      },
     }),
     prisma.transaction.count({ where: { paymentStatus: "PENDING" } }),
     prisma.product.findMany({
