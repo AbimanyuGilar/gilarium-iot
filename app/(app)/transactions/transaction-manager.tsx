@@ -194,15 +194,15 @@ export default function TransactionManager({
                     ))}
                   </ul>
                   <div className="mt-4 rounded-md bg-muted p-4 text-sm">
-                    <div className="flex justify-between text-gray-500">
+                    {/* <div className="flex justify-between text-gray-500">
                       <span>Subtotal</span>
                       <span>{formatIDR(t.subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-500">
+                    </div> */}
+                    {/* <div className="flex justify-between text-gray-500">
                       <span>Pajak (11%)</span>
                       <span>{formatIDR(t.tax)}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between border-t-2 border-gray-200 pt-2 text-base font-extrabold">
+                    </div> */}
+                    <div className="mt-1 flex justify-between border-gray-200 text-base font-extrabold">
                       <span>Total</span>
                       <span>{formatIDR(t.total)}</span>
                     </div>
@@ -214,7 +214,7 @@ export default function TransactionManager({
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Pelanggan</p>
                     <p className="mt-0.5 font-bold">{t.customerName || "Walk-in"} ({t.customerName ? "Terdaftar" : "Umum"})</p>
                     <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Metode Pembayaran</p>
-                    <p className="mt-0.5 font-bold">{PAYMENT_METHOD_LABEL[t.paymentMethod ?? "CASH"] ?? "—"}</p>
+                    <p className="mt-0.5 font-bold">{PAYMENT_METHOD_LABEL[t.paymentMethod ?? "—"] ?? "—"}</p>
                     {t.note ? (
                       <>
                         <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Catatan</p>

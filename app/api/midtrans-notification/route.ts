@@ -18,7 +18,8 @@ export async function POST(request: Request) {
   const { 
     order_id: orderId, 
     transaction_status: transactionStatus, 
-    fraudStatus: fraudStatus 
+    fraud_status: fraudStatus,
+    payment_type: paymentMethod
   } = statusResponse
   
   async function updateStatus(status: PaymentStatus) {
@@ -36,7 +37,8 @@ export async function POST(request: Request) {
           id: order?.id
         },
         data: {
-          paymentStatus: status
+          paymentStatus: status,
+          paymentMethod
         }
       })
     })
