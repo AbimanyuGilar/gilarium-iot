@@ -14,7 +14,6 @@ export async function POST(request: Request) {
   
   const statusResponse = await (apiClient as any).transaction.notification(requestJson)
 
-  
   const { 
     order_id: orderId, 
     transaction_status: transactionStatus, 
@@ -22,19 +21,11 @@ export async function POST(request: Request) {
     payment_type: paymentMethod
   } = statusResponse
   
-  async function updateStatus(status: PaymentStatus) {
+  async function updateTransaction(status: PaymentStatus) {
     await prisma.$transaction(async tx => {
-      const order = await tx.transaction.findUnique({
+      const transaction = await tx.transaction.update({
         where: {
           invoiceNo: orderId
-        },
-        select: {
-          id: true
-        }
-      })
-      await tx.transaction.update({
-        where: {
-          id: order?.id
         },
         data: {
           paymentStatus: status,
@@ -42,46 +33,60 @@ export async function POST(request: Request) {
           ...(status === 'PAID' ? { paidAt: new Date() } : {})
         }
       })
+
+      if (status === 'PAID') {
+        const transactionItems = await tx.transactionItem.findMany({
+          where: {
+            transactionId: transaction.id
+          }
+        })
+
+        await Promise.all(
+          transactionItems.map(item => {
+            tx.product.update({
+              where: {
+                id: item.productId
+              },
+              data: {
+                stock: {
+                  decrement: item.quantity
+                }
+              }
+            })
+          })
+        )
+      }
     })
   } 
   
   if (transactionStatus == 'capture'){
     if (fraudStatus == 'accept'){
-      // TODO set transaction status on your database to 'success'
       try {
-        await updateStatus('PAID')
-        // and response with 200 OK
+        await updateTransaction('PAID')
         return NextResponse.json({status: 'OK'})
       } catch {
         return NextResponse.json({status: 500})
       }
     }
   } else if (transactionStatus == 'settlement'){
-      // TODO set transaction status on your database to 'success'
-      try {
-        await updateStatus('PAID')
-        // and response with 200 OK
-        return NextResponse.json({status: 'OK'})
-      } catch {
-        return NextResponse.json({status: 500})
-      }
-  } else if (transactionStatus == 'cancel' ||
-    transactionStatus == 'deny' ||
-    transactionStatus == 'expire'){
-    // TODO set transaction status on your database to 'failure'
     try {
-      await updateStatus('FAILED')
-      // and response with 200 OK
+      await updateTransaction('PAID')
       return NextResponse.json({status: 'OK'})
     } catch {
       return NextResponse.json({status: 500})
     }
-    // and response with 200 OK
-  } else if (transactionStatus == 'pending'){
-    // TODO set transaction status on your database to 'pending' / waiting payment
+  } else if (transactionStatus == 'cancel' ||
+    transactionStatus == 'deny' ||
+    transactionStatus == 'expire'){
     try {
-      await updateStatus('PENDING')
-      // and response with 200 OK
+      await updateTransaction('FAILED')
+      return NextResponse.json({status: 'OK'})
+    } catch {
+      return NextResponse.json({status: 500})
+    }
+  } else if (transactionStatus == 'pending'){
+    try {
+      await updateTransaction('PENDING')
       return NextResponse.json({status: 'OK'})
     } catch {
       return NextResponse.json({status: 500})
