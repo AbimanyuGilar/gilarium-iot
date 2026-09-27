@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         })
 
         await Promise.all(
-          transactionItems.map(item => {
+          transactionItems.map(item =>
             tx.product.update({
               where: {
                 id: item.productId
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
                 }
               }
             })
-          })
+          )
         )
       }
     })
