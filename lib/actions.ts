@@ -315,6 +315,8 @@ export async function checkout(products: ProductToCheckout[]) {
 }
 
 export async function pendingTransaction({ snapToken, orderId}: { snapToken: string, orderId: string }) {
+  if (!(await authorized())) return { ok: false, message: "Sesi berakhir, silakan login." };
+  
   try {
     const transaction = await prisma.transaction.update({
       where: {
@@ -332,12 +334,13 @@ export async function pendingTransaction({ snapToken, orderId}: { snapToken: str
   } catch (e){
     return {
       ok: false,
-      message: 'Galat: ' + e
+      message: 'Gagal memproses transaksi.'
     }
   }
 }
 
 export async function getSnapToken(transactionId: string) {
+  if (!(await authorized())) return { ok: false, message: "Sesi berakhir, silakan login." };
   try {
     const transaction = await prisma.transaction.findUnique({
       where: {
