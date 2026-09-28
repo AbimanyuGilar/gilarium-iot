@@ -20,7 +20,7 @@ import Modal from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/common";
 import { formatIDR, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { checkout } from "@/lib/actions";
+import { checkout, pendingTransaction } from "@/lib/actions";
 import Script from "next/script";
 
 declare global {
@@ -125,9 +125,17 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
 
     if (transaction.ok && transaction.token) {
       window.snap.pay(transaction.token, {
-        onSuccess: function (result) {
-          console.log('Success:', result);
+        onSuccess: () => {
           window.location.href = `/pos`;
+        },
+        onPending: async () => {
+          const pending = await pendingTransaction({ snapToken: transaction.token, orderId: transaction.orderId })
+          if (pending.ok) {
+            alert('Pembayaran ditunda.')
+            console.log(pending)
+          } else {
+            console.log(pending.message)
+          }
         },
       })
     } else {
@@ -144,6 +152,7 @@ export default function PosClient({ products }: { products: PosProduct[] }) {
         src="https://app.sandbox.midtrans.com/snap/snap.js"
         data-client-key={process.env.MIDTRANS_CLIENT_KEY}
       ></Script>
+      
       <div className="space-y-8 pb-40 lg:pb-0">
         <PageHeader
           title="Kasir POS"

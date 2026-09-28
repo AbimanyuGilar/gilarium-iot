@@ -1066,6 +1066,7 @@ export const TransactionScalarFieldEnum = {
   paymentMethod: 'paymentMethod',
   paymentStatus: 'paymentStatus',
   note: 'note',
+  snapToken: 'snapToken',
   paidAt: 'paidAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

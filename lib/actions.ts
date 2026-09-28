@@ -314,6 +314,52 @@ export async function checkout(products: ProductToCheckout[]) {
   }
 }
 
+export async function pendingTransaction({ snapToken, orderId}: { snapToken: string, orderId: string }) {
+  try {
+    const transaction = await prisma.transaction.update({
+      where: {
+        invoiceNo: orderId
+      },
+      data: {
+        snapToken
+      }
+    })
+    return {
+      ok: true,
+      data: transaction,
+      message: 'Pembayaran ditunda.'
+    }
+  } catch (e){
+    return {
+      ok: false,
+      message: 'Galat: ' + e
+    }
+  }
+}
+
+export async function getSnapToken(transactionId: string) {
+  try {
+    const transaction = await prisma.transaction.findUnique({
+      where: {
+        id: transactionId
+      },
+      select: {
+        snapToken: true
+      }
+    })
+
+    return {
+      ok: true,
+      snapToken: transaction?.snapToken
+    }
+  } catch {
+    return {
+      ok: false,
+      message: 'Gagal memproses pelunasan.'
+    }
+  }
+}
+
 const ALLOWED_STATUS = ["PAID", "PENDING", "FAILED", "EXPIRED"] as const;
 
 export async function updatePaymentStatus(
